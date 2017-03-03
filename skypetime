@@ -1,0 +1,67 @@
+#!/usr/bin/env python
+from __future__ import print_function
+
+import sqlite3
+import os
+import sys
+
+
+def read_duration(s):
+    """Parse `duration' value from "body_xml" string and return the number
+    of seconds.
+    """
+    pos = s.find('<duration>')
+    if pos == -1:
+        return 0  # invalid input string
+    s = s[pos + len('<duration>'):]
+    pos = s.find('</duration>')
+    assert pos != -1
+    s = s[:pos]
+    return int(s)
+
+
+def time_split(nsec):
+    """Given number of seconds, return a tuple (H, M, S), where
+    H is the number of hours, M -- minutes, S -- seconds.
+
+    Examples:
+      time_split(                 23) == (0,  0, 23)
+      time_split(         17*60 + 23) == (0, 17, 23)
+      time_split(5*3600 + 17*60 + 23) == (5, 17, 23)
+    """
+    assert type(nsec) is int
+    h = nsec / 3600
+    m = nsec / 60 % 60
+    s = nsec % 60
+    return h, m, s
+
+# assert time_split(23) == (0, 0, 23)
+# assert time_split(1043) == (0, 17, 23)
+# assert time_split(19043) == (5, 17, 23)
+
+
+def main(argv=sys.argv):
+    skype_ids = sys.argv[1:]
+    db_path = os.path.join(os.path.expanduser('~'), 'Library',
+                           'Application Support', 'Skype', skype_ids[0],
+                           'main.db')
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("""\
+    SELECT body_xml FROM Messages
+    WHERE chatname = '{}' AND chatmsg_type = 18
+      AND body_xml LIKE '%type="ended"%'
+    --  AND body_xml LIKE '%<duration>%'
+    ORDER BY timestamp DESC""".format(skype_ids[1]))
+
+    def _f(t):
+        return read_duration(t[0])
+    total_nsec = sum(map(_f, cur.fetchall()))
+    print('{}:{:02}:{:02}'.format(*time_split(total_nsec)))
+
+    conn.close()
+
+
+if __name__ == '__main__':
+    main()
