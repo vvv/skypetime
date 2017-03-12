@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 import sqlite3
+import argparse
 import os
 import sys
 
@@ -41,6 +42,23 @@ def time_split(nsec):
 
 
 def main(argv=sys.argv):
+    p = argparse.ArgumentParser(
+        usage='%(prog)s [OPTION]',
+        description='Calculate duration of Skype conversations')
+    # p._optionals.title = 'Options'
+    # p.add_argument('-d', '--decode', help='convert xcode to yaml',
+    #                action='store_true')
+    # p.add_argument('--version', action='version',
+    #                version='%(prog)s ' + version)
+    # p.add_argument('--self-check', help='run unit tests and exit',
+    #                action='store_true')
+    # g = p.add_argument_group('Positional arguments')
+    # g.add_argument('file', metavar='FILE', nargs='?', default='-',
+    #                help='Input file. With no FILE, or when FILE is -,'
+    #                ' read standard input.')
+    args = p.parse_args()
+    return
+
     skype_ids = sys.argv[1:]
     db_path = os.path.join(os.path.expanduser('~'), 'Library',
                            'Application Support', 'Skype', skype_ids[0],
