@@ -1,10 +1,15 @@
 #!/usr/bin/env python
-from __future__ import print_function
+from __future__ import print_function, division
 
 import sqlite3
 import argparse
 import os
 import sys
+from datetime import datetime
+import time
+
+
+DATE_FMT = '%Y-%m-%d'
 
 
 def read_duration(s):
@@ -31,8 +36,8 @@ def time_split(nsec):
       time_split(5*3600 + 17*60 + 23) == (5, 17, 23)
     """
     assert type(nsec) is int
-    h = nsec / 3600
-    m = nsec / 60 % 60
+    h = nsec // 3600
+    m = nsec // 60 % 60
     s = nsec % 60
     return h, m, s
 
@@ -41,37 +46,60 @@ def time_split(nsec):
 # assert time_split(19043) == (5, 17, 23)
 
 
-def main(argv=sys.argv):
+def date_to_epoch(s):
+    """Converts local time in DATE_FMT format to epoch time.
+
+    See `DATE_FMT'.
+    """
+    try:
+        return int(time.mktime(datetime.strptime(s, DATE_FMT).timetuple()))
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            '{!r} is not a date in {!r} format'.format(s, DATE_FMT))
+
+
+def main():
     p = argparse.ArgumentParser(
-        usage='%(prog)s [OPTION]',
-        description='Calculate duration of Skype conversations')
-    # p._optionals.title = 'Options'
-    # p.add_argument('-d', '--decode', help='convert xcode to yaml',
-    #                action='store_true')
-    # p.add_argument('--version', action='version',
-    #                version='%(prog)s ' + version)
-    # p.add_argument('--self-check', help='run unit tests and exit',
-    #                action='store_true')
-    # g = p.add_argument_group('Positional arguments')
-    # g.add_argument('file', metavar='FILE', nargs='?', default='-',
-    #                help='Input file. With no FILE, or when FILE is -,'
-    #                ' read standard input.')
+        description='Calculate duration of Skype conversations.')
+    p.add_argument('skype_id', help='Skype identifier of the remote user')
+    p.add_argument('--start', metavar='DATE', type=date_to_epoch,
+                   help='Start date in {} format; see strftime(3)'.format(
+                       DATE_FMT.replace('%', '%%')))
+    p.add_argument('--days', metavar='N', type=int,
+                   help='Number of days to take into account')
     args = p.parse_args()
-    return
 
-    skype_ids = sys.argv[1:]
+    local_skype_id = 'XXX'  # XXX FIXME
+    if args.skype_id == local_skype_id:
+        print('Talking to yourself again, huh?', file=sys.stderr)
+        return 1
+
+    end = None
+    if args.days:
+        assert args.days > 0
+        if not args.start:
+            print("`--days' requires `--start'", file=sys.stderr)
+            return 1
+        end = args.start + args.days * 24*3600
+
     db_path = os.path.join(os.path.expanduser('~'), 'Library',
-                           'Application Support', 'Skype', skype_ids[0],
+                           'Application Support', 'Skype', local_skype_id,
                            'main.db')
-
+    try:
+        conn = sqlite3.connect(db_path)
+    except sqlite3.OperationalError as e:
+        print("{}: '{}'".format(e, db_path), file=sys.stderr)
+        return 1
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
-    cur.execute("""\
+    sql = """\
     SELECT body_xml FROM Messages
     WHERE chatname = '{}' AND chatmsg_type = 18
       AND body_xml LIKE '%type="ended"%'
-    --  AND body_xml LIKE '%<duration>%'
-    ORDER BY timestamp DESC""".format(skype_ids[1]))
+      AND {} < timestamp AND timestamp < {}
+    ORDER BY timestamp DESC""".format(args.skype_id, args.start, end)
+    print(sql, file=sys.stderr); return 99  # XXX DELETEME
+    cur.execute(sql)
 
     def _f(t):
         return read_duration(t[0])
@@ -82,4 +110,4 @@ def main(argv=sys.argv):
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
