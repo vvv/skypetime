@@ -7,6 +7,7 @@ import os
 import sys
 from datetime import datetime
 import time
+import xml.etree.ElementTree as ET
 
 
 DATE_FMT = '%Y-%m-%d'
@@ -46,6 +47,13 @@ def time_split(nsec):
 # assert time_split(19043) == (5, 17, 23)
 
 
+def local_skype_id():
+    xml_file = os.path.join(os.path.expanduser('~'), 'Library',
+                            'Application Support', 'Skype', 'shared.xml')
+    root = ET.parse(xml_file).getroot()
+    return root.find('Lib/Account/Default').text
+
+
 def date_to_epoch(s):
     """Converts local time in DATE_FMT format to epoch time.
 
@@ -69,8 +77,7 @@ def main():
                    help='Number of days to take into account')
     args = p.parse_args()
 
-    local_skype_id = 'XXX'  # XXX FIXME
-    if args.skype_id == local_skype_id:
+    if args.skype_id == local_skype_id():
         print('Talking to yourself again, huh?', file=sys.stderr)
         return 1
 
@@ -83,7 +90,7 @@ def main():
         end = args.start + args.days * 24*3600
 
     db_path = os.path.join(os.path.expanduser('~'), 'Library',
-                           'Application Support', 'Skype', local_skype_id,
+                           'Application Support', 'Skype', local_skype_id(),
                            'main.db')
     try:
         conn = sqlite3.connect(db_path)
@@ -94,11 +101,13 @@ def main():
     cur = conn.cursor()
     sql = """\
     SELECT body_xml FROM Messages
-    WHERE chatname = '{}' AND chatmsg_type = 18
-      AND body_xml LIKE '%type="ended"%'
-      AND {} < timestamp AND timestamp < {}
-    ORDER BY timestamp DESC""".format(args.skype_id, args.start, end)
-    print(sql, file=sys.stderr); return 99  # XXX DELETEME
+    WHERE chatname = '{skype_id}' AND chatmsg_type = 18
+      AND body_xml LIKE '%type="ended"%'{start}{end}
+    ORDER BY timestamp DESC""".format(
+        skype_id=args.skype_id,
+        start=('' if args.start is None else
+               ' AND {} < timestamp'.format(args.start)),
+        end=('' if end is None else ' AND timestamp < {}'.format(end)))
     cur.execute(sql)
 
     def _f(t):
